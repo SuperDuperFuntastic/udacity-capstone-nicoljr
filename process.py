@@ -2,10 +2,12 @@ import logging
 import os
 import pandas as pd
 import requests
-import shutil
 from meteostat import Stations
 from pathlib import Path
 from config.definitions import ROOT_DIR
+
+# TODO remove when no longer needed
+pd.set_option('display.max_columns', None)
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)-4s %(message)s',
@@ -14,7 +16,6 @@ logging.basicConfig(level=logging.INFO,
 def prepare_bicycle_metadata():
     '''
     Walks through the data folder and parses information from its contents
-    
     Returns:
         bicycle_metadata (list): a collection of metadata dictionaries
     '''
@@ -33,12 +34,15 @@ def prepare_bicycle_metadata():
             # Reduces number of API calls needed
             if city != last_city and state != last_state:
                 latitude, longitude = get_lat_long(city, state)
-                weather_station_code = get_nearby_weather_station(latitude,
-                                                                  longitude)
+                weather_station_code, time_zone = get_nearby_weather_station(
+                    latitude,
+                    longitude)
 
             bicycle_dict = {"file_path": file_path,
                             "weather_station_code": weather_station_code,
-                            "city": city, "state": state,
+                            "time_zone": time_zone,
+                            "city": city,
+                            "state": state,
                             "country": country}
             bicycle_metadata.append(bicycle_dict)
             last_city = city
@@ -73,12 +77,16 @@ def get_nearby_weather_station(latitude, longitude):
     Returns:
         nearby_station (str): the ID of the nearest weather station with the
             most data
+        time_zone (str): the time zone of the weather station, which we'll
+            use later to account for local time vs. UTC
     '''
     stations = Stations()
     stations = stations.nearby(lat=latitude, lon=longitude)
     df = stations.fetch(3).sort_values(by=['hourly_start', 'distance'])
     nearby_station = df.index[0]
-    return nearby_station
+    station_data = df.iloc[0]
+    time_zone = station_data['timezone']
+    return nearby_station, time_zone
     
 def create_fact_dataframe(bicycle_metadata_item):
     '''
@@ -96,16 +104,22 @@ def create_fact_dataframe(bicycle_metadata_item):
                      names=['date', 'bicycle_count'],
                      usecols=[0,1],
                      parse_dates=['date'])
-    df['time'] = df['date'].dt.time
-    df['date'] = df['date'].dt.date
+    df['local_time'] = df['date'].dt.time
+    df['local_date'] = df['date'].dt.date
+    df['timezone'] = bicycle_metadata_item['time_zone']
+    df['utc_datetime'] = df['date'].dt.tz_localize(
+        bicycle_metadata_item['time_zone'],
+        ambiguous=True, nonexistent='shift_backward').dt.tz_convert('utc')
+    df['utc_date'] = df['utc_datetime'].dt.date
+    df['utc_time'] = df['utc_datetime'].dt.time
     df['counter_location'] = bicycle_metadata_item['file_path'].stem
-    df['weather_station_code'] = bicycle_metadata_item['weather_station_code']
-    df = df[['date', 'time', 'counter_location', 'weather_station_code', 'bicycle_count']]
+    df['weather_station_code'] = bicycle_metadata_item\
+        ['weather_station_code']
+    df = df[['local_date', 'local_time', 'utc_date', 'utc_time',
+             'counter_location', 'weather_station_code', 'bicycle_count']]
     
     logging.info(f'Dataframe created, shape: {df.shape}')
-    create_output_csv(df, 'bicycle_fact.csv')
-    
-    
+    create_output_csv(df, 'bicycle_fact.csv') 
     
 def create_output_csv(dataframe, output_name):
     output_destination = os.path.join(ROOT_DIR, 'data/output')
@@ -114,11 +128,11 @@ def create_output_csv(dataframe, output_name):
     if os.path.exists(os.path.join(output_destination, output_name)):
         dataframe.to_csv(os.path.join(output_destination, output_name),
                         mode='a',
-                        header=False)
+                        header=False,
+                        index=False)
     else:
         dataframe.to_csv(os.path.join(output_destination, output_name),
-                        index=True,
-                        index_label='id')
+                        index=False)
 
 def fetch_weather_data(bicycle_metadata):
     '''
@@ -142,13 +156,13 @@ def fetch_weather_data(bicycle_metadata):
             r = requests.get(url)
             f.write(r.content)
 
-def stage_weather_data():
+def transform_weather_data():
     '''
     Reads the compressed weather .csv files, creates dataframes, and then
         creates (or appends to) a .csv data file
     '''
     output_destination = os.path.join(ROOT_DIR, 'data/output')
-    col_names = ['date', 'hour', 'temperature_c', 'dew_point_c',
+    col_names = ['utc_date', 'utc_hour', 'temperature_c', 'dew_point_c',
             'relative_humidity_pct', 'hourly_precipitation_mm',
             'snow_mm', 'wind_direction_deg', 'avg_wind_spd_kmh',
             'peak_wind_gust_kmh', 'air_pressure_hpa',
@@ -160,16 +174,17 @@ def stage_weather_data():
                                 compression='gzip',
                                 names=col_names)
                 df['weather_station_code'] = file.split('.')[0]
+                df['utc_hour'] = df['utc_hour'].astype(str).str.zfill(2)\
+                    + ':00:00'
                 logging.info(f"Dataframe created, {df.shape}")
                 create_output_csv(df, 'weather_dim.csv')
 
 def main():
     # TODO: Clean this up, i'm just using logic to bypass stuff that i don't need to run again
-    # TODO: add timezone to file metadata based on lat/lon logic if possible, convert weather
-    # station data to local time (currently UTC)
+    
     get_bike_data = False
     get_weather_data = False
-    do_weather_data = True
+    do_weather_data = False
     bicycle_metadata = prepare_bicycle_metadata()
     
     if get_bike_data:
@@ -181,7 +196,7 @@ def main():
         fetch_weather_data(bicycle_metadata)
 
     if do_weather_data:
-        stage_weather_data()
+        transform_weather_data()
 
 if __name__ == '__main__':
     main()

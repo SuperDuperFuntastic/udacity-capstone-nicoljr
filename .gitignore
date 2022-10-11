@@ -192,3 +192,7 @@ cython_debug/
 *.code-workspace
 
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
+
+# Temporary folders for tinkering
+scratch/
+scratch.py
