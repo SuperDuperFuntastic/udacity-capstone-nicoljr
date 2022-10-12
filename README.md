@@ -2,8 +2,8 @@
 ## Cycling Analysis
 
 According to Andrew Van Dam's work for the Washington Post's weekly
-"Department of Data" column, the following 20 US cities with populations over
-100,000 have the greatest number of bicycle commuters:
+"Department of Data" column, the following 20 US cities with populations
+over 100,000 have the greatest number of bicycle commuters:
 
 ![bar chart depicting the top 20 US cities for bicycle commuters](
 images/large_city_bicycle_commuters.png)

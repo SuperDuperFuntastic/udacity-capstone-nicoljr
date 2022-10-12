@@ -1,6 +1,11 @@
+import configparser
+from lib2to3.pgen2 import driver
 import logging
 import os
 import pandas as pd
+import sqlalchemy as sa
+from sqlalchemy.engine.url import URL
+from sqlalchemy.orm import sessionmaker
 import requests
 from meteostat import Stations
 from pathlib import Path
@@ -88,7 +93,7 @@ def get_nearby_weather_station(latitude, longitude):
     time_zone = station_data['timezone']
     return nearby_station, time_zone
     
-def create_fact_dataframe(bicycle_metadata_item):
+def create_fact_dataframe(bicycle_metadata_item) -> pd.DataFrame:
     '''
     Creates a dataframe that contains information from both the metadata
         and the contents of the bicycle count source files
@@ -107,6 +112,7 @@ def create_fact_dataframe(bicycle_metadata_item):
     df['local_time'] = df['date'].dt.time
     df['local_date'] = df['date'].dt.date
     df['timezone'] = bicycle_metadata_item['time_zone']
+    # new UTC-based columns by converting from local time 
     df['utc_datetime'] = df['date'].dt.tz_localize(
         bicycle_metadata_item['time_zone'],
         ambiguous=True, nonexistent='shift_backward').dt.tz_convert('utc')
@@ -119,7 +125,8 @@ def create_fact_dataframe(bicycle_metadata_item):
              'counter_location', 'weather_station_code', 'bicycle_count']]
     
     logging.info(f'Dataframe created, shape: {df.shape}')
-    create_output_csv(df, 'bicycle_fact.csv') 
+    create_output_csv(df, 'bicycle_fact.csv')
+    return df
     
 def create_output_csv(dataframe, output_name):
     output_destination = os.path.join(ROOT_DIR, 'data/output')
@@ -176,13 +183,29 @@ def transform_weather_data():
                 df['weather_station_code'] = file.split('.')[0]
                 df['utc_hour'] = df['utc_hour'].astype(str).str.zfill(2)\
                     + ':00:00'
-                logging.info(f"Dataframe created, {df.shape}")
+                logging.info(f"Dataframe created, shape: {df.shape}")
                 create_output_csv(df, 'weather_dim.csv')
 
 def main():
     # TODO: Clean this up, i'm just using logic to bypass stuff that i don't need to run again
+    # TODO: Look into this...
+    # https://stackoverflow.com/questions/38402995/how-to-write-data-to-redshift-that-is-a-result-of-a-dataframe-created-in-python
     
-    get_bike_data = False
+    config = configparser.ConfigParser()
+    config.read('config\config.cfg')
+    url = URL.create(
+        drivername='redshift+redshift_connector',
+        host=config['CLUSTER']['HOST'],
+        port=config['CLUSTER']['DB_PORT'],
+        database=config['CLUSTER']['DB_NAME'],
+        username=config['CLUSTER']['DB_USER'],
+        password=config['CLUSTER']['DB_PASSWORD']
+    )
+    
+    engine = sa.create_engine(url)
+    con = engine.connect()
+    
+    get_bike_data = True
     get_weather_data = False
     do_weather_data = False
     bicycle_metadata = prepare_bicycle_metadata()
@@ -190,7 +213,9 @@ def main():
     if get_bike_data:
         logging.info('Working locally')
         for item in bicycle_metadata:
-            create_fact_dataframe(item)
+            df = create_fact_dataframe(item)
+            df.to_sql('bicycle_fact', con=con, if_exists='append',
+                      index=False)
     
     if get_weather_data:
         fetch_weather_data(bicycle_metadata)
