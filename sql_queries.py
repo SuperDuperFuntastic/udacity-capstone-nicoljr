@@ -1,3 +1,10 @@
+import configparser
+
+config = configparser.ConfigParser()
+config.read('config\config.cfg')
+
+s3_bucket = config['S3']['CAPSTONE_BUCKET']
+credentials = config['ARN']['ARN_ROLE']
 
 # Modified from of sunnycmf's date dimension definition
 # https://gist.github.com/sunnycmf/131a10a17d226e2ffb69
@@ -46,9 +53,11 @@ CREATE TABLE bicycle_fact (
     local_time              VARCHAR(9) NOT NULL,
     utc_date                DATE NOT NULL,
     utc_time                VARCHAR(9) NOT NULL,
+    city                    VARCHAR NOT NULL,
+    state                   VARCHAR NOT NULL,
     counter_location        VARCHAR,
     weather_station_code    VARCHAR,
-    bicycle_count           INT
+    bicycle_count           NUMERIC
 );
 '''
 )
@@ -76,8 +85,77 @@ CREATE TABLE weather_d (
 '''
 )
 
+bicycle_fact_copy = (
+f'''
+COPY bicycle_fact FROM 's3://{s3_bucket}/bicycle_fact'
+CREDENTIALS 'aws_iam_role={credentials}'
+CSV
+IGNOREHEADER 1;
+'''
+)
+
+weather_d_copy = (
+f'''
+COPY weather_d FROM 's3://{s3_bucket}/weather_d'
+CREDENTIALS 'aws_iam_role={credentials}'
+CSV
+IGNOREHEADER 1;
+'''
+)
+
+date_d_copy = (
+f'''
+COPY date_d FROM 's3://{s3_bucket}/date_d'
+CREDENTIALS 'aws_iam_role={credentials}'
+CSV
+IGNOREHEADER 1;
+'''
+)
+
+time_d_copy = (
+f'''
+COPY time_d FROM 's3://{s3_bucket}/time_d'
+CREDENTIALS 'aws_iam_role={credentials}'
+CSV
+IGNOREHEADER 1;
+'''
+)
+
+bicycle_fact_count = (
+'''
+SELECT COUNT(*) FROM bicycle_fact
+'''
+)
+
+weather_d_count = (
+'''
+SELECT COUNT(*) FROM weather_d
+'''
+)
+
+date_d_count = (
+'''
+SELECT COUNT(*) FROM date_d
+'''
+)
+
+time_d_count = (
+'''
+SELECT COUNT(*) FROM time_d
+'''
+)
 # Query Lists
 create_table_queries = [bicycle_fact_create,
                         time_dimension_create,
                         date_dimension_create,
                         weather_dimension_create]
+
+copy_table_queries = [bicycle_fact_copy,
+                      weather_d_copy,
+                      date_d_copy,
+                      time_d_copy]
+
+target_control_queries = [bicycle_fact_count,
+                          weather_d_count,
+                          date_d_count,
+                          time_d_count]
