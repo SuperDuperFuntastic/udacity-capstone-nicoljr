@@ -47,7 +47,7 @@ tables (an actual implementation would omit the drop/create after the
 tables were created) and perform a set of Redshift COPY queries to load
 the data from the .csv's into their respective Redshift tables.
 
-Record integrity is enforced through definitons on the Redshift tables, and a
+Record integrity is enforced through definitions on the Redshift tables, and a
 control total comparison is performed on the files staged in the
 data/output folder and the 
 
@@ -106,7 +106,7 @@ images/redshift_data_model.png)
 
 ## Defending Technology Decisions
 Since the data that populate the fact table and the weather dim were spread
-among multiple files, it made sence to stage them in S3 and use a Redshift
+among multiple files, it made sense to stage them in S3 and use a Redshift
 cluster to copy the data to their respective tables. Additionally, reading
 the data from Redshift and loading it into the included Power BI model was
 extremely quick, especially compared to loading from .csv's.
