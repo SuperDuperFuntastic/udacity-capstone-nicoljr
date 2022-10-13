@@ -1,3 +1,4 @@
+from enum import unique
 import boto3
 import configparser
 import logging
@@ -9,7 +10,7 @@ import requests
 from meteostat import Stations
 from pathlib import Path
 from config.definitions import ROOT_DIR
-from sql_queries import create_table_queries, copy_table_queries, target_control_queries
+from sql_queries import create_table_queries, copy_table_queries, target_control_queries, dim_uniqueness_queries, bicycle_no_blanks
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)-4s %(message)s',
@@ -251,18 +252,18 @@ def load_redshift_tables(cur, con):
         con.commit()
     logging.info("finished loading redshift tables")
     
-def target_control_totals(cur, con):
+def target_control_totals(cur, query_list):
     '''
     Performs basic row counts on the target tables for comparison with
         similar counts on the source files
     Parameters:
-        cur (psycopg2 curosor)
-        con (psycopg2 connection)
+        cur (psycopg2 cursor)
+        query_list (a list of queries)
     Returns:
         target_counts (dict): {'table_name':row_count,...}
     '''
     target_counts = {}
-    for query in target_control_queries:
+    for query in query_list:
         # split and drop \n
         table_name = query.split('FROM ',1)[-1][:-1]
         logging.info(f"Counting rows on {table_name}")
@@ -309,6 +310,57 @@ def source_control_totals(source_path):
             last_count = count
     logging.info("Source control totals complete")
     return source_counts
+
+def check_dim_uniqueness(cur, total_dim_queries, unique_dim_queries):
+    '''
+    Compares target control totals to unique counts on the dimension tables
+        as defined by what makes a unique record in the corresponding query
+        in sql_queries.py and indicates if the two counts are equal
+    Parameters:
+        cur (psycopg2 cursor)
+        total_dim_queries (list): a list of queries that will return counts
+        unique_dim_queries (list): a list of queries that will, based on the
+            columns specified in each query on sql_queries.py, return a
+            count of their unique values
+    Returns: True or False
+    '''
+    unique_counts = {}
+    target_counts = target_control_totals(cur, total_dim_queries)
+    for query in unique_dim_queries:
+        # split and drop \n
+        table_name = query.split('FROM ')[-1][:-1]
+        logging.info(f"Counting unique values on {table_name}")
+        cur.execute(query)
+        count = cur.fetchone()[0]
+        unique_counts[table_name]=count
+    logging.info(f"Total dim counts: {target_counts}")
+    logging.info(f"Unique dim counts: {unique_counts}")
+    if unique_counts == target_counts:
+        logging.info("Dim uniqueness check passed")
+        return True
+    else:
+        logging.info("Dim uniqueness check failed")
+        return False
+
+def no_fk_blanks_on_bicycle_fact(cur):
+    '''
+    Checks the columns used as FK's on the bicycle_fact table for nulls
+        and returns the count of any nulls found
+    Parameters:
+        cur (psycopg2 cursor)
+    Returns:
+        True or False
+    '''
+    logging.info(f"Checking for nulls in key columns on fact table")
+    cur.execute(bicycle_no_blanks)
+    should_be_zero = cur.fetchone()[0]
+    logging.info(f"Total nulls found (expecting 0): {should_be_zero}")
+    if should_be_zero == 0:
+        logging.info("Fact table null check passed")
+        return True
+    else:
+        logging.info("Fact table null check failed")
+        return False
             
 def main():
     config = configparser.ConfigParser()
@@ -340,21 +392,31 @@ def main():
     load_redshift_tables(cur, con)
     
     # Control totals
-    target_counts = target_control_totals(cur, con)
+    target_counts = target_control_totals(cur, target_control_queries)
     source_counts = source_control_totals(source_path)
-    
-    con.close()
-    
+        
     logging.info(f"Comparing control total dicts (remember, order doesn't matter)")
     logging.info(source_counts)
     logging.info(target_counts)
     
+    # Control totals test
     if target_counts == source_counts:
         logging.info("Control totals match!")
-        logging.info("PROCESS COMPLETE! YAY! :)")
     else:
         logging.info("Control totals do NOT match!")
-
+    
+    # Dim uniqueness testing, excludes fact table
+    dim_count_queries = target_control_queries[1:]
+    uniqueness_check = check_dim_uniqueness(cur, dim_count_queries,
+                                            dim_uniqueness_queries)
+    
+    null_fact_check = no_fk_blanks_on_bicycle_fact(cur)
+    con.close()
+    
+    if all([uniqueness_check, null_fact_check]):
+        logging.info("Additional data integrity checks passed!")
+    else:
+        logging.info("One or more data integrity checks failed, see the logs for details")
     
 if __name__ == '__main__':
     main()

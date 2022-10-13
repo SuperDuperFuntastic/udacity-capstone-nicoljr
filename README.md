@@ -103,6 +103,20 @@ https://data.seattle.gov/browse?q=bicycle%20counter&sortBy=relevance
 ![Bicycle fact table with M:1 relationships to dates, time, and weather dims](
 images/redshift_data_model.png)
 
+## Defending Data Model Decisions
+I opted for a star schema as the design for the data model because it is well
+suited for reporting. A centralized fact table that has a many-to-one
+relationship with various dimensions (like time, date, and weather) means
+less complicated joins when being used by downstream users. Additionally, a
+star schema like this one allows for quick and easy aggregation (in this
+case, aggregating hourly bicycle counts by day, week, month, year, city,
+state, temperature, etc.), which allows end users to quickly view sums,
+averages, mins, and maxes of the bicycle count data at various levels.
+
+Since there is very little need for insert, update, or delete operations
+on this reporting data, a traditional OLTP-style design isn't necessary.
+Plus, designing this as an OLTP-style database would've meant far more
+complicated queries and joins for end users.
 
 ## Defending Technology Decisions
 Since the data that populate the fact table and the weather dim were spread
@@ -152,4 +166,67 @@ could also be worth looking into Redshift Serverless, as according
 to this AWS resource, it would allow up to 2,000 connections within
 a single workspace.
 https://docs.amazonaws.cn/en_us/redshift/latest/mgmt/amazon-redshift-limits.html
-    
+
+## Evidence of Successful Completion of ETL
+The included `ride_bikes_have_fun.pbix` file is a Power BI model and
+accompanying dashboard that loaded its data directly from the Redshift
+database upon the completion of the ETL process. Below are some
+screenshots of the data presented in the dashboard, as well as what the
+equivalent filter criteria would be when looking at the database. The
+screenshots are designed to show the different filters (at the top) and
+the levels of aggregation (time-based line chart by year, month, day, and
+time by hour at the bottom) the data could be presented at. The line chart
+can be "drilled down" into to show aggregations across time.
+
+Additionally, you can open the .pbix file and play around with the
+visualizations yourself as well as long as you don't mind installing
+Power BI Desktop (it's free!)
+
+### Total Number of Rainy, September Weekend Morning Riders in Madison in 2020
+Rainy weather:
+- weather_d.hourly_precipitation_mm > 0.1
+
+September/Weekend/2020:
+- date_d.month_of_year = '09',
+- date_d.weekend = 'Weekend' 
+- date_d.year = 2020 (drilled down in visualizion, only one day fit that criteria so I went all the way down to the hourly level)
+
+Morning:
+- time_d.ampm = 'AM'
+
+Madison:
+- bicycle_fact.state = 'wi'
+- bicycle_fact.city = 'madison'
+
+![Dashboard depicting rainy morning Madison riders](
+images/rainy_madison_riders_dashboard.png)
+
+### Total Number of Hot Summer Night Riders in Seattle in 2020
+Hot weather:
+- weather_d > 26
+
+Summer/2020:
+- date_d.month_of_year in ('06, '07', '08')
+- date_d.year = 2020 (drilled down in visualization)
+
+Night
+- time_d.hour > 16
+
+Seattle:
+- bicycle_fact.state = 'wa'
+- bicycle_fact.city = 'seattle'
+
+![Dashboard depicting hot Seattle summer night riders](
+images/hot_seattle_night_riders_dashboard.png)
+
+## Connection Info
+![Screenshot depecting the Redshift connection info for Jason's capstone](
+images/redshift_connection_info.png)
+
+## Fact Table Contents Example after Loading to Power BI
+![Screenshot depecting bicycle data loaded from Redshift to Power BI](
+images/bicycle_fact_loaded_to_power_bi.png)
+
+## Weather Dim Table Contents Example after Loading to Power BI
+![Screenshot depecting weather data loaded from Redshift to Power BI](
+images/weather_dim_loaded_to_power_bi.png)

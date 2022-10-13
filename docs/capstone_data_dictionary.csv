@@ -1,0 +1,44 @@
+Table Name,Column Name,Data Type,Max Character Length,Numeric Precision,Nullable?,Additional Details,Column Definition
+bicycle_fact,id,integer,,32,N/A,"Identity, PK, Unique","The auto-incremented, unique ID that identifies an hourly bicycle count fact record"
+bicycle_fact,local_date,date,,,NO,Key to date_d,The local date a bicycle count was recorded
+bicycle_fact,local_time,character varying,9,,NO,Key to time_d,"The local time, by hour, a bicycle count was recorded"
+bicycle_fact,utc_date,date,,,NO,Composite foreign key to weather_d,The converted UTC date based on the local time zone associated with the city/state a bicycle count was recorded
+bicycle_fact,utc_time,character varying,9,,NO,Composite foreign key to weather_d,The converted UTC time based on the local time zone associated with the city/state a bicycle count was recorded
+bicycle_fact,city,character varying,256,,NO,,The city in which a bicycle count was recorded
+bicycle_fact,state,character varying,256,,NO,,The state in which a bicycle count was recorded
+bicycle_fact,counter_location,character varying,256,,YES,,The name of the location (or name of the counter itself) that captured a bicycle count
+bicycle_fact,weather_station_code,character varying,256,,YES,Composite foreign key to weather_d,The weather station code closest to the lat/lon of the city and state
+bicycle_fact,bicycle_count,numeric,,18,YES,,The count (by hour) of bicycles captured by the counter
+date_d,date_id,bigint,,64,N/A,"Identity, PK, Unique","The auto-incremented, unique ID that identifies a date"
+date_d,date,date,,,NO,,The full date
+date_d,year,integer,,32,YES,,The year part of a date
+date_d,month,character,10,,YES,,The month part of a date
+date_d,month_of_year,character,2,,YES,,The character representation of the numeric month-of-year of a date
+date_d,day_of_month,integer,,32,YES,,The numeric day-of-month of a date
+date_d,day,character,10,,YES,,The name of a day
+date_d,day_of_week,integer,,32,YES,,The numeric day-of-week of a date
+date_d,weekend,character,10,,NO,,A weekend/weekday indicator by name
+date_d,day_of_year,integer,,32,YES,,The numeric day-of-year of a date
+date_d,week_of_year,character,2,,YES,,The character representation of the numeric week-of-year of a date
+date_d,quarter,integer,,32,YES,,The numeric quarter of a date
+date_d,previous_day,date,,,NO,,Yesterday's date
+date_d,next_day,date,,,NO,,Tomorrow's date
+time_d,time_id,integer,,32,N/A,"Identity, PK, Unique","The auto-incremented, unique ID that identifies a time"
+time_d,fulltime,time without time zone,,,YES,,A time in 00:00:00 format
+time_d,hour,integer,,32,YES,,The hour part of a time
+time_d,ampm,character varying,2,,YES,,An AM/PM indicator by name
+weather_d,weather_id,integer,,32,N/A,"Identity, PK, Unique","The auto-incremented, unique ID that identifies an hourly weather record"
+weather_d,utc_date,date,,,NO,Composite key,The UTC date of the weather record
+weather_d,utc_hour,character varying,9,,NO,Composite key,The UTC hour of the weather record (00:00:00)
+weather_d,temperature_c,numeric,,18,YES,,The recorded temperature in celsius
+weather_d,dew_point_c,numeric,,18,YES,,The recorded dew point temperature in celsius
+weather_d,relative_humidity_pct,numeric,,18,YES,,The relative humidity percentage
+weather_d,hourly_precipitation_mm,numeric,,18,YES,,The hourly precipitation (includes snow) in mm
+weather_d,snow_mm,numeric,,18,YES,,The hourly accumulation of snow in mm (never captured)
+weather_d,wind_direction_deg,numeric,,18,YES,,The direction of the wind in degrees
+weather_d,avg_wind_spd_kmh,numeric,,18,YES,,The average hourly wind speed in kilometers per hour
+weather_d,peak_wind_gust_kmh,numeric,,18,YES,,The peak hourly wind gust speed in kilometers per hour
+weather_d,air_pressure_hpa,numeric,,18,YES,,The air pressure in hectoPascals
+weather_d,hourly_sunshine_min,numeric,,18,YES,,The total hourly sunshine in minutes
+weather_d,weather_condition_code,character varying,256,,YES,,The condition code associated with the hour of weather (never captured)
+weather_d,weather_station_code,character varying,256,,NO,Composite key,The character code of the weather station that recorded the weather event

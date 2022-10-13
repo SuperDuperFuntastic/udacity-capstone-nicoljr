@@ -144,6 +144,42 @@ time_d_count = (
 SELECT COUNT(*) FROM time_d
 '''
 )
+
+bicycle_no_blanks = (
+'''
+SELECT COUNT(*)
+FROM bicycle_fact
+WHERE
+    local_time IS NULL
+OR  local_date IS NULL
+OR  weather_station_code IS NULL
+'''
+)
+
+weather_uniqueness = (
+'''
+SELECT COUNT(*)
+FROM
+	(SELECT DISTINCT
+        utc_date,
+        utc_hour,
+        weather_station_code
+	FROM weather_d)'''
+)
+
+date_uniqueness = (
+'''
+SELECT COUNT(DISTINCT(date))
+FROM date_d
+'''
+)
+time_uniqueness = (
+'''
+SELECT COUNT(DISTINCT(fulltime))
+FROM time_d
+'''
+)
+
 # Query Lists
 create_table_queries = [bicycle_fact_create,
                         time_dimension_create,
@@ -159,3 +195,7 @@ target_control_queries = [bicycle_fact_count,
                           weather_d_count,
                           date_d_count,
                           time_d_count]
+
+dim_uniqueness_queries = [weather_uniqueness,
+                          date_uniqueness,
+                          time_uniqueness]
