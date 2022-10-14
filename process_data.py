@@ -1,4 +1,3 @@
-from enum import unique
 import boto3
 import configparser
 import logging
